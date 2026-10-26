@@ -1,0 +1,204 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Crossfir3d game server: one ARM instance in its own VPC; only the TLS gateway's
+  port is open; admin through SSM; daily snapshots of the players' data.
+
+Parameters:
+  HostedZoneId:
+    Type: AWS::Route53::HostedZone::Id
+  DomainName:
+    Type: String
+    Description: The hosted zone's domain, e.g. example.org (players use play.<domain>)
+  GitHubRepo:
+    Type: String
+    Default: prototypo/Crossfir3d-server
+  AlertEmail:
+    Type: String
+    Description: Where the budget alarm is sent
+
+Resources:
+  # --- Network: one public subnet, only port 13327 in, only HTTPS out ---
+  Vpc:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.40.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags: [{ Key: Name, Value: crossfir3d }]
+  Gateway:
+    Type: AWS::EC2::InternetGateway
+  GatewayAttach:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties: { VpcId: !Ref Vpc, InternetGatewayId: !Ref Gateway }
+  Subnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref Vpc
+      CidrBlock: 10.40.1.0/24
+      AvailabilityZone: !Select [0, !GetAZs ""]
+  Routes:
+    Type: AWS::EC2::RouteTable
+    Properties: { VpcId: !Ref Vpc }
+  DefaultRoute:
+    Type: AWS::EC2::Route
+    DependsOn: GatewayAttach
+    Properties: { RouteTableId: !Ref Routes, DestinationCidrBlock: 0.0.0.0/0, GatewayId: !Ref Gateway }
+  SubnetRoutes:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties: { SubnetId: !Ref Subnet, RouteTableId: !Ref Routes }
+  ServerGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Players reach the TLS gateway only; the server reaches HTTPS only
+      VpcId: !Ref Vpc
+      SecurityGroupIngress:
+        - { IpProtocol: tcp, FromPort: 13327, ToPort: 13327, CidrIp: 0.0.0.0/0, Description: TLS gateway }
+      SecurityGroupEgress:
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: "updates, S3, SSM, Let's Encrypt, Route 53" }
+
+  # --- Builds: GitHub Actions on main may upload; the server may download ---
+  BuildBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      PublicAccessBlockConfiguration:
+        { BlockPublicAcls: true, BlockPublicPolicy: true, IgnorePublicAcls: true, RestrictPublicBuckets: true }
+      BucketEncryption:
+        ServerSideEncryptionConfiguration: [{ ServerSideEncryptionByDefault: { SSEAlgorithm: AES256 } }]
+      OwnershipControls: { Rules: [{ ObjectOwnership: BucketOwnerEnforced }] }
+  BuildBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref BuildBucket
+      PolicyDocument:
+        Statement:
+          - Effect: Deny
+            Principal: "*"
+            Action: "s3:*"
+            Resource: [!GetAtt BuildBucket.Arn, !Sub "${BuildBucket.Arn}/*"]
+            Condition: { Bool: { aws:SecureTransport: false } }
+  GitHubOidc:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList: [sts.amazonaws.com]
+  GitHubRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal: { Federated: !Ref GitHubOidc }
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: sts.amazonaws.com
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubRepo}:ref:refs/heads/main"
+      Policies:
+        - PolicyName: upload-builds
+          PolicyDocument:
+            Statement:
+              - { Effect: Allow, Action: s3:PutObject, Resource: !Sub "${BuildBucket.Arn}/*" }
+
+  # --- The server ---
+  ServerRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement: [{ Effect: Allow, Principal: { Service: ec2.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore]
+      Policies:
+        - PolicyName: builds-and-certificate
+          PolicyDocument:
+            Statement:
+              - { Effect: Allow, Action: s3:GetObject, Resource: !Sub "${BuildBucket.Arn}/*" }
+              # certbot's Route 53 plugin: find the zone, add and remove its challenge record.
+              - { Effect: Allow, Action: [route53:ListHostedZones, route53:GetChange], Resource: "*" }
+              - Effect: Allow
+                Action: route53:ChangeResourceRecordSets
+                Resource: !Sub "arn:aws:route53:::hostedzone/${HostedZoneId}"
+                Condition:
+                  ForAllValues:StringEquals:
+                    route53:ChangeResourceRecordSetsRecordTypes: [TXT]
+                    route53:ChangeResourceRecordSetsNormalizedRecordNames: [!Sub "_acme-challenge.play.${DomainName}"]
+  ServerProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties: { Roles: [!Ref ServerRole] }
+  Server:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: "{{resolve:ssm:/aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-arm64}}"
+      InstanceType: t4g.small
+      SubnetId: !Ref Subnet
+      SecurityGroupIds: [!Ref ServerGroup]
+      IamInstanceProfile: !Ref ServerProfile
+      DisableApiTermination: true
+      MetadataOptions: { HttpTokens: required, HttpPutResponseHopLimit: 1 }
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs: { VolumeSize: 8, VolumeType: gp3, Encrypted: true, DeleteOnTermination: true }
+      Tags: [{ Key: Name, Value: crossfir3d }]
+  PlayerData:
+    Type: AWS::EC2::Volume
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Properties:
+      AvailabilityZone: !GetAtt Subnet.AvailabilityZone
+      Size: 10
+      VolumeType: gp3
+      Encrypted: true
+      Tags: [{ Key: Name, Value: crossfir3d-players }, { Key: Backup, Value: crossfir3d }]
+  PlayerDataAttach:
+    Type: AWS::EC2::VolumeAttachment
+    Properties: { InstanceId: !Ref Server, VolumeId: !Ref PlayerData, Device: /dev/sdf }
+  Address:
+    Type: AWS::EC2::EIP
+    Properties: { Domain: vpc, InstanceId: !Ref Server }
+  PlayName:
+    Type: AWS::Route53::RecordSet
+    Properties:
+      HostedZoneId: !Ref HostedZoneId
+      Name: !Sub "play.${DomainName}"
+      Type: A
+      TTL: "300"
+      ResourceRecords: [!Ref Address]
+
+  # --- Backups and the bill ---
+  SnapshotRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement: [{ Effect: Allow, Principal: { Service: dlm.amazonaws.com }, Action: sts:AssumeRole }]
+      ManagedPolicyArns: [arn:aws:iam::aws:policy/service-role/AWSDataLifecycleManagerServiceRole]
+  DailySnapshots:
+    Type: AWS::DLM::LifecyclePolicy
+    Properties:
+      Description: Players' data, daily, kept 14 days
+      State: ENABLED
+      ExecutionRoleArn: !GetAtt SnapshotRole.Arn
+      PolicyDetails:
+        ResourceTypes: [VOLUME]
+        TargetTags: [{ Key: Backup, Value: crossfir3d }]
+        Schedules:
+          - Name: daily
+            CreateRule: { Interval: 24, IntervalUnit: HOURS, Times: ["17:00"] }
+            RetainRule: { Count: 14 }
+            CopyTags: true
+  Budget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: crossfir3d-monthly
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit: { Amount: 30, Unit: USD }
+      NotificationsWithSubscribers:
+        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80 }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100 }
+          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
+
+Outputs:
+  InstanceId: { Value: !Ref Server }
+  BuildBucket: { Value: !Ref BuildBucket }
+  GitHubRoleArn: { Value: !GetAtt GitHubRole.Arn }
+  PlayAddress: { Value: !Sub "play.${DomainName}:13327" }
