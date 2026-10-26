@@ -1,0 +1,11 @@
+[package]
+name = "gateway"
+description = "TLS gateway in front of a Crossfire server: only checked client messages get through"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rustls-pki-types = { version = "1.15.1", features = ["std"] }
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "net", "io-util", "time", "macros", "sync"] }
+tokio-rustls = "0.26.6"
