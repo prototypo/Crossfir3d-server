@@ -26,6 +26,8 @@ fetch crossfire-server "$SERVER_PIN"
 fetch crossfire-arch "$ARCH_PIN"
 fetch crossfire-maps "$MAPS_PIN"
 ln -s "$WORK/crossfire-arch" "$WORK/crossfire-server/lib/arch"
+# The build runs the server once, which needs the maps too.
+ln -s "$WORK/crossfire-maps" "$WORK/crossfire-server/lib/maps"
 
 # The server's build runs it (to compile the arch), and it refuses to run as root.
 id builder >/dev/null 2>&1 || useradd -m builder
@@ -42,6 +44,7 @@ grep -q 'Crossfir3d: save new characters' server/login.cpp
 as_builder "sh ./autogen.sh --prefix=$PREFIX --localstatedir=/srv --without-libcurl >/dev/null"
 as_builder "make -s -j$(nproc) && make -s install"
 # The maps as they are at the pin, without git history.
+rm -rf "$PREFIX/share/crossfire/maps"
 mkdir -p "$PREFIX/share/crossfire/maps"
 git -C "$WORK/crossfire-maps" archive HEAD | tar -x -C "$PREFIX/share/crossfire/maps"
 # Python modules the map scripts import; python-cjson (in the maps' requirements) is
