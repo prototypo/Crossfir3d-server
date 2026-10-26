@@ -30,7 +30,7 @@ EC2 t4g.small, Amazon Linux 2023, own VPC, Elastic IP
 | Unpatched software | `dnf-automatic` security updates daily; the gateway and C server rebuilt from pinned sources. |
 | Build tools on the server | None: GitHub Actions builds both for ARM Linux, puts them in a private S3 bucket; the server can only read that bucket. |
 | Lost player data | Encrypted EBS; daily snapshots kept 14 days (Data Lifecycle Manager). |
-| Surprise bills | AWS Budget alarm at US$30 a month, email to the owner. |
+| Surprise bills | AWS Budget alarm at US$30 a month (80% spent, or 100% forecast), email to the owner. It lives in the paying account (a member account cannot have one): `deploy/budget.json`. |
 | Telling the world | The C server's metaserver announcement turned off. |
 
 ## Steps
@@ -45,14 +45,14 @@ EC2 t4g.small, Amazon Linux 2023, own VPC, Elastic IP
 **B. Infrastructure** (me, CloudFormation in `deploy/aws.yaml`, deployed with the AWS CLI):
 VPC with one public subnet, security group (13327 only), Elastic IP, DNS record
 `play.<domain>`, instance role (SSM, read the build bucket, write TXT records in the
-hosted zone for the certificate), encrypted data volume, snapshot policy, budget alarm.
+hosted zone for the certificate), encrypted data volume, snapshot policy.
 
 **C. Builds** (me): a GitHub Actions workflow builds the gateway and the pinned C server
 (with its arch and maps) for `aarch64-linux`, and uploads them to the bucket.
 
 **D. Install** (me, `deploy/install.sh` run through SSM): users, nftables rules, systemd
 units with the sandbox settings, certbot with the Route 53 DNS plugin (renewal restarts
-the gateway), server settings (no metaserver, port 13326), CloudWatch log shipping.
+the gateway), server settings (no metaserver, port 13326). Logs stay in the journal for now (`journalctl -u gateway -u crossfire` through SSM); CloudWatch later if needed.
 
 **E. Check** (me): play from the client at `play.<domain>:13327`; a port scan from
 outside shows only 13327; the C server port refuses from outside; `dm` is refused; a
@@ -70,3 +70,12 @@ snapshot exists after a day.
 | Route 53 hosted zone | 0.50 |
 | S3, CloudWatch, data out | 1-2 |
 | Domain | about 15-25 a year |
+
+## Status (2026-10-26)
+
+Live at `play.crossfir3d.org:13327` (account 306449439997, stack `crossfir3d`,
+instance `i-04ff86994664bfa9f`). Checked from outside: only 13327 open; Let's Encrypt
+certificate, TLS 1.3; a new account and character played through the gateway.
+
+Update the server: merge to main (GitHub Actions uploads the build), then run
+`deploy/server/install.sh <bucket> play.crossfir3d.org` through SSM.
