@@ -12,9 +12,6 @@ Parameters:
   GitHubRepo:
     Type: String
     Default: prototypo/Crossfir3d-server
-  AlertEmail:
-    Type: String
-    Description: Where the budget alarm is sent
 
 Resources:
   # --- Network: one public subnet, only port 13327 in, only HTTPS out ---
@@ -54,7 +51,7 @@ Resources:
       SecurityGroupIngress:
         - { IpProtocol: tcp, FromPort: 13327, ToPort: 13327, CidrIp: 0.0.0.0/0, Description: TLS gateway }
       SecurityGroupEgress:
-        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: "updates, S3, SSM, Let's Encrypt, Route 53" }
+        - { IpProtocol: tcp, FromPort: 443, ToPort: 443, CidrIp: 0.0.0.0/0, Description: "updates, S3, SSM, Lets Encrypt, Route 53" }
 
   # --- Builds: GitHub Actions on main may upload; the server may download ---
   BuildBucket:
@@ -162,7 +159,7 @@ Resources:
       TTL: "300"
       ResourceRecords: [!Ref Address]
 
-  # --- Backups and the bill ---
+  # --- Backups (the budget alarm lives in the paying account: deploy/budget.json) ---
   SnapshotRole:
     Type: AWS::IAM::Role
     Properties:
@@ -172,7 +169,7 @@ Resources:
   DailySnapshots:
     Type: AWS::DLM::LifecyclePolicy
     Properties:
-      Description: Players' data, daily, kept 14 days
+      Description: Player data daily kept 14 days
       State: ENABLED
       ExecutionRoleArn: !GetAtt SnapshotRole.Arn
       PolicyDetails:
@@ -183,19 +180,6 @@ Resources:
             CreateRule: { Interval: 24, IntervalUnit: HOURS, Times: ["17:00"] }
             RetainRule: { Count: 14 }
             CopyTags: true
-  Budget:
-    Type: AWS::Budgets::Budget
-    Properties:
-      Budget:
-        BudgetName: crossfir3d-monthly
-        BudgetType: COST
-        TimeUnit: MONTHLY
-        BudgetLimit: { Amount: 30, Unit: USD }
-      NotificationsWithSubscribers:
-        - Notification: { NotificationType: ACTUAL, ComparisonOperator: GREATER_THAN, Threshold: 80 }
-          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
-        - Notification: { NotificationType: FORECASTED, ComparisonOperator: GREATER_THAN, Threshold: 100 }
-          Subscribers: [{ SubscriptionType: EMAIL, Address: !Ref AlertEmail }]
 
 Outputs:
   InstanceId: { Value: !Ref Server }

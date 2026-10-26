@@ -1,0 +1,7 @@
+{
+  "BudgetName": "crossfir3d-monthly",
+  "BudgetType": "COST",
+  "TimeUnit": "MONTHLY",
+  "BudgetLimit": { "Amount": "30", "Unit": "USD" },
+  "CostFilters": { "LinkedAccount": ["306449439997"] }
+}

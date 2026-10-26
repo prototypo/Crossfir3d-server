@@ -59,5 +59,5 @@ cargo build --release --locked -q -p gateway
 mkdir -p "$PREFIX/bin" dist
 cp target/release/gateway "$PREFIX/bin/"
 cp -r deploy/server "$PREFIX/deploy"
-tar -czf "dist/crossfir3d-server-$(uname -m).tar.gz" -C / "${PREFIX#/}"
+tar -czf "dist/crossfir3d-server-$(uname -m).tar.gz" --owner=0 --group=0 --numeric-owner -C / "${PREFIX#/}"
 echo "built dist/crossfir3d-server-$(uname -m).tar.gz"

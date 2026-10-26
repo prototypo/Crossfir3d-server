@@ -8,7 +8,7 @@ DOMAIN=${2:?domain}
 ARCH=$(uname -m)
 HERE=/opt/crossfire/deploy
 
-dnf install -y -q nftables dnf-automatic python3
+dnf install -y -q nftables dnf-automatic python3.11
 
 # Security updates every day, applied.
 sed -i 's/^upgrade_type *=.*/upgrade_type = security/; s/^apply_updates *=.*/apply_updates = yes/' /etc/dnf/automatic.conf
@@ -30,7 +30,9 @@ mountpoint -q /srv/crossfire || mount /srv/crossfire
 systemctl stop gateway crossfire 2>/dev/null || true
 aws s3 cp --only-show-errors "s3://$BUCKET/crossfir3d-server-$ARCH.tar.gz" /tmp/build.tar.gz
 rm -rf /opt/crossfire
-tar -xzf /tmp/build.tar.gz -C /
+# Owned by root, whatever the archive says: no other user may change the programs.
+tar -xzf /tmp/build.tar.gz -C / --no-same-owner
+chown -R root:root /opt/crossfire
 rm /tmp/build.tar.gz
 # No DMs from the start: the shipped dm_file holds only comments.
 sed -i '/^[^#]/d' /opt/crossfire/etc/crossfire/dm_file
@@ -46,8 +48,9 @@ systemctl restart nftables
 
 # The certificate: Let's Encrypt, proved through Route 53 (the instance role may only
 # change this domain's records). No email is sent to Let's Encrypt.
-if [ ! -x /opt/certbot/bin/certbot ]; then
-    python3 -m venv /opt/certbot
+if [ ! -x /opt/certbot/bin/python3.11 ]; then
+    rm -rf /opt/certbot
+    python3.11 -m venv /opt/certbot
     /opt/certbot/bin/pip install -q certbot certbot-dns-route53
 fi
 install -m 0755 "$HERE/renewed.sh" /etc/crossfir3d-renewed.sh

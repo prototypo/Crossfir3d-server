@@ -3,4 +3,5 @@
 set -eu
 install -d -m 0750 -o root -g gateway /etc/crossfir3d/tls
 install -m 0640 -o root -g gateway "$RENEWED_LINEAGE/fullchain.pem" "$RENEWED_LINEAGE/privkey.pem" /etc/crossfir3d/tls/
-systemctl try-restart gateway
+# Not there yet on the first install (install.sh starts it after).
+if systemctl cat gateway.service >/dev/null 2>&1; then systemctl try-restart gateway; fi
