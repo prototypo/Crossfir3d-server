@@ -1,0 +1,20 @@
+[Unit]
+Description=Crossfire C server (players reach it only through the gateway)
+After=network-online.target
+RequiresMountsFor=/srv/crossfire
+
+[Service]
+User=crossfire
+Group=crossfire
+Environment=PYTHONPATH=/opt/crossfire/pylib
+ExecStart=/opt/crossfire/bin/crossfire-server -p 13326
+WorkingDirectory=/srv/crossfire
+ReadWritePaths=/srv/crossfire
+# It listens on every address and has no setting for that: only this machine may talk to it.
+IPAddressDeny=any
+IPAddressAllow=localhost
+MemoryMax=1G
+TasksMax=64
+
+[Install]
+WantedBy=multi-user.target

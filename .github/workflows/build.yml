@@ -1,0 +1,34 @@
+# Builds the server for AWS (ARM Linux, Amazon Linux 2023) and, from main, puts it in
+# the build bucket the server installs from. Actions are pinned to commits.
+name: build
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # only used on main, to upload with the AWS role
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    container: amazonlinux:2023
+    steps:
+      - run: dnf install -y -q tar gzip git awscli-2
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - run: sh deploy/build.sh
+      - run: sh -c '. "$HOME/.cargo/env" && cargo test --locked'
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: crossfir3d-server
+          path: dist/*.tar.gz
+          retention-days: 7
+      - if: github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ap-southeast-2
+      - if: github.ref == 'refs/heads/main' && vars.AWS_ROLE_ARN != ''
+        run: aws s3 cp --only-show-errors dist/ "s3://${{ vars.BUILD_BUCKET }}/" --recursive

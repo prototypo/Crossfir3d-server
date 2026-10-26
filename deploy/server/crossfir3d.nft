@@ -1,0 +1,7 @@
+# Second lock on the C server's port (the security group is the first): only this machine.
+table inet crossfir3d {
+    chain input {
+        type filter hook input priority 0; policy accept;
+        iifname != "lo" tcp dport 13326 drop
+    }
+}

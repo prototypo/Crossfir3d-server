@@ -1,0 +1,18 @@
+[Unit]
+Description=Crossfir3d TLS gateway (the only thing players connect to)
+After=network-online.target crossfire.service
+
+[Service]
+User=gateway
+Group=gateway
+Environment=GATEWAY_LISTEN=0.0.0.0:13327
+Environment=GATEWAY_SERVER=127.0.0.1:13326
+Environment=GATEWAY_CERT=/etc/crossfir3d/tls/fullchain.pem
+Environment=GATEWAY_KEY=/etc/crossfir3d/tls/privkey.pem
+ExecStart=/opt/crossfire/bin/gateway
+MemoryMax=256M
+TasksMax=32
+LimitNOFILE=1024
+
+[Install]
+WantedBy=multi-user.target
