@@ -11,7 +11,11 @@ Parameters:
     Description: The hosted zone's domain, e.g. example.org (players use play.<domain>)
   GitHubRepo:
     Type: String
-    Default: prototypo/Crossfir3d-server
+    Description: >-
+      GitHub's OIDC subject prefix for the repo, with its owner and repo ID numbers
+      (gh api repos/OWNER/REPO/actions/oidc/customization/sub), so a renamed or
+      re-created repo with the same name cannot upload
+    Default: prototypo@824236/Crossfir3d-server@1434055013
 
 Resources:
   # --- Network: one public subnet, only port 13327 in, only HTTPS out ---
