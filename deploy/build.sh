@@ -46,7 +46,7 @@ as_builder "make -s -j$(nproc) && make -s install"
 # The maps as they are at the pin, without git history.
 rm -rf "$PREFIX/share/crossfire/maps"
 mkdir -p "$PREFIX/share/crossfire/maps"
-git -C "$WORK/crossfire-maps" archive HEAD | tar -x -C "$PREFIX/share/crossfire/maps"
+git -c safe.directory="$WORK/crossfire-maps" -C "$WORK/crossfire-maps" archive HEAD | tar -x -C "$PREFIX/share/crossfire/maps"
 # Python modules the map scripts import; python-cjson (in the maps' requirements) is
 # Python 2 only, so a stand-in over the stdlib json module replaces it.
 python3 -m pip install -q --target "$PREFIX/pylib" requests
