@@ -1,0 +1,6 @@
+[
+  { "Notification": { "NotificationType": "ACTUAL", "ComparisonOperator": "GREATER_THAN", "Threshold": 80 },
+    "Subscribers": [{ "SubscriptionType": "EMAIL", "Address": "david@hyland-wood.org" }] },
+  { "Notification": { "NotificationType": "FORECASTED", "ComparisonOperator": "GREATER_THAN", "Threshold": 100 },
+    "Subscribers": [{ "SubscriptionType": "EMAIL", "Address": "david@hyland-wood.org" }] }
+]
