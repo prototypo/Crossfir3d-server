@@ -185,6 +185,34 @@ Resources:
             RetainRule: { Count: 14 }
             CopyTags: true
 
+  # --- Self-repair: AWS moves the server off broken hardware, or reboots a stuck system ---
+  RecoverAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The host failed its system check; recover the instance
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_System
+      Dimensions: [{ Name: InstanceId, Value: !Ref Server }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Sub "arn:aws:automate:${AWS::Region}:ec2:recover"]
+  RebootAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: The instance failed its own check; reboot it
+      Namespace: AWS/EC2
+      MetricName: StatusCheckFailed_Instance
+      Dimensions: [{ Name: InstanceId, Value: !Ref Server }]
+      Statistic: Maximum
+      Period: 60
+      EvaluationPeriods: 3
+      Threshold: 0
+      ComparisonOperator: GreaterThanThreshold
+      AlarmActions: [!Sub "arn:aws:automate:${AWS::Region}:ec2:reboot"]
+
 Outputs:
   InstanceId: { Value: !Ref Server }
   BuildBucket: { Value: !Ref BuildBucket }

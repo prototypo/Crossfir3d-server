@@ -36,6 +36,8 @@ chown -R root:root /opt/crossfire
 rm /tmp/build.tar.gz
 # No DMs from the start: the shipped dm_file holds only comments.
 sed -i '/^[^#]/d' /opt/crossfire/etc/crossfire/dm_file
+# This server's own welcome and news, not Crossfire's defaults.
+install -m 0644 "$HERE/motd" "$HERE/news" /opt/crossfire/etc/crossfire/
 [ -n "$(ls -A /srv/crossfire)" ] || cp -a /opt/crossfire/var-template/. /srv/crossfire/
 chown -R crossfire:crossfire /srv/crossfire
 chmod 0700 /srv/crossfire

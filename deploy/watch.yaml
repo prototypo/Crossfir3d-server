@@ -1,0 +1,43 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: >-
+  Crossfir3d: email when players cannot reach the game. A Route 53 health check
+  connects to the gateway's port from around the world; its alarm must live in
+  us-east-1, where Route 53 health check figures are kept. Deploy in us-east-1.
+
+Parameters:
+  PlayName:
+    Type: String
+    Default: play.crossfir3d.org
+  AlertEmail:
+    Type: String
+
+Resources:
+  GatewayCheck:
+    Type: AWS::Route53::HealthCheck
+    Properties:
+      HealthCheckConfig:
+        Type: TCP
+        FullyQualifiedDomainName: !Ref PlayName
+        Port: 13327
+        RequestInterval: 30
+        FailureThreshold: 3
+      HealthCheckTags: [{ Key: Name, Value: crossfir3d-gateway }]
+  Alerts:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription: [{ Protocol: email, Endpoint: !Ref AlertEmail }]
+  DownAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmDescription: Players cannot reach play.crossfir3d.org:13327
+      Namespace: AWS/Route53
+      MetricName: HealthCheckStatus
+      Dimensions: [{ Name: HealthCheckId, Value: !Ref GatewayCheck }]
+      Statistic: Minimum
+      Period: 60
+      EvaluationPeriods: 2
+      Threshold: 1
+      ComparisonOperator: LessThanThreshold
+      TreatMissingData: breaching
+      AlarmActions: [!Ref Alerts]
+      OKActions: [!Ref Alerts]

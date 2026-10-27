@@ -27,7 +27,7 @@ use filter::{Addresses, Bucket, Verdict, MAX_FRAME};
 const HANDSHAKE: Duration = Duration::from_secs(10);
 /// No message for this long closes the connection (the client sends `beat` every few seconds).
 const IDLE: Duration = Duration::from_secs(600);
-/// What `read_frame` says when the player closed the connection: a normal quit, not logged.
+/// Why a connection ended when the player simply closed it: a normal quit, not logged.
 const LEFT: &str = "player left";
 
 struct Config {
@@ -72,8 +72,9 @@ async fn main() {
         }
         let (config, addresses) = (config.clone(), addresses.clone());
         tokio::spawn(async move {
-            if let Err(why) = serve(tcp, peer, &config, &addresses).await {
-                eprintln!("{ip}: closed: {why}");
+            match serve(tcp, peer, &config, &addresses).await {
+                Err(why) if why != LEFT => eprintln!("{ip}: closed: {why}"),
+                _ => {} // a normal quit, or a port check
             }
             lock(&addresses).disconnect(ip);
         });
@@ -94,7 +95,10 @@ fn lock(a: &Mutex<Addresses>) -> std::sync::MutexGuard<'_, Addresses> {
 async fn serve(tcp: TcpStream, peer: SocketAddr, config: &Config, addresses: &Mutex<Addresses>) -> Result<(), String> {
     let _ = tcp.set_nodelay(true);
     let deadline = Instant::now() + HANDSHAKE;
-    let tls = timeout(HANDSHAKE, config.tls.accept(tcp)).await.map_err(|_| "slow TLS handshake")?.map_err(|e| format!("TLS: {e}"))?;
+    let tls = timeout(HANDSHAKE, config.tls.accept(tcp)).await.map_err(|_| "slow TLS handshake")?.map_err(|e| {
+        // Closed before saying anything: a port check (the health check every 30 s).
+        if e.kind() == std::io::ErrorKind::UnexpectedEof { LEFT.to_string() } else { format!("TLS: {e}") }
+    })?;
     let (mut from_player, mut to_player) = tokio::io::split(tls);
     // The server is only contacted once the player has said something valid.
     let first = timeout(deadline.saturating_duration_since(Instant::now()), read_frame(&mut from_player))
@@ -115,10 +119,7 @@ async fn serve(tcp: TcpStream, peer: SocketAddr, config: &Config, addresses: &Mu
     });
     let result = relay(&mut from_player, &mut to_server, peer.ip(), config.allow_dm, addresses).await;
     down.abort();
-    match result {
-        Err(e) if e == LEFT => Ok(()),
-        r => r,
-    }
+    result
 }
 
 /// Checks and passes on the player's messages until something ends the connection.
