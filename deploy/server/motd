@@ -1,0 +1,7 @@
+Welcome to Crossfir3d, the Crossfire world in 3D!
+
+Arrow keys move you (Up is a step forward). [b]Enter[/b] opens the command line, [b]I[/b] the inventory, [b]K[/b] the key bindings, [b]Tab[/b] the top view and [b]Escape[/b] the settings.
+
+Useful commands: help, who, save, quit. To report a bug or ask for help, type: report <your message>
+
+Crossfir3d is built on Crossfire ([i]http://crossfire.real-time.com[/i]), with thanks to its authors.

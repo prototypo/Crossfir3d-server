@@ -12,7 +12,7 @@ PREFIX=/opt/crossfire
 WORK=$(mktemp -d)
 
 dnf install -y -q gcc gcc-c++ make autoconf automake libtool flex pkgconf-pkg-config \
-    sqlite-devel python3-devel python3-pip git tar gzip which findutils shadow-utils util-linux
+    sqlite-devel python3-devel python3-pip libxcrypt-devel patch git tar gzip which findutils shadow-utils util-linux
 if ! command -v cargo >/dev/null; then
     curl -sSf https://sh.rustup.rs | sh -s -- -y -q --profile minimal
     . "$HOME/.cargo/env"
@@ -40,6 +40,8 @@ cd "$WORK/crossfire-server"
 # (and missing from its account) after the next run. Save it anyway.
 sed -i 's|return 0; /\* no experience, no save \*/|; /* Crossfir3d: save new characters too */|' server/login.cpp
 grep -q 'Crossfir3d: save new characters' server/login.cpp
+# Passwords hashed with yescrypt, not DES (only 8 characters counted, quick to crack).
+patch -s -p1 < "$ROOT/deploy/patches/yescrypt.patch"
 # No libcurl: no metaserver, so the server never announces itself.
 as_builder "sh ./autogen.sh --prefix=$PREFIX --localstatedir=/srv --without-libcurl >/dev/null"
 as_builder "make -s -j$(nproc) && make -s install"
