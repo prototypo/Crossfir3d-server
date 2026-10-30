@@ -7,6 +7,20 @@ The first step is a **gateway**. Players connect to it, never to the Crossfire C
 server, which runs behind it and cannot be reached from outside. Parts of the C
 server move to Rust one at a time, behind the gateway.
 
+## The public server
+
+This code runs the public Crossfir3d server, `play.crossfir3d.org:13327` (on AWS; see
+`docs/aws-plan.md`). Only the gateway's port is open; the C server is not reachable
+from outside.
+
+- **TLS only.** Players need [Crossfir3d](https://github.com/prototypo/Crossfir3d)
+  0.1.2 or newer. Other Crossfire clients, and Crossfir3d 0.1.1 and older, cannot
+  connect: they do not use TLS.
+- **Stronger password storage.** The C server is patched
+  (`deploy/patches/yescrypt.patch`) to hash new passwords with yescrypt, in place of
+  2-character-salt DES, which only counted the first 8 characters. Old DES hashes
+  still check.
+
 ## The gateway (`crates/gateway`)
 
 What it does for each player connection:
